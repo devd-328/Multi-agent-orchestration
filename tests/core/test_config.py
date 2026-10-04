@@ -73,6 +73,43 @@ def test_empty_provider_is_invalid(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "   " not in str(exc_info.value)
 
 
+def test_limit_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("MAX_TASK_ATTEMPTS", raising=False)
+    monkeypatch.delenv("MAX_REVIEW_REVISIONS", raising=False)
+    monkeypatch.setenv("LLM_MODEL", "test-model")
+    monkeypatch.setenv("LLM_BASE_URL", "http://127.0.0.1:9")
+
+    settings = load_settings(env_file=None)
+
+    assert settings.max_task_attempts == 3
+    assert settings.max_review_revisions == 2
+
+
+def test_limit_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_MODEL", "test-model")
+    monkeypatch.setenv("LLM_BASE_URL", "http://127.0.0.1:9")
+    monkeypatch.setenv("MAX_TASK_ATTEMPTS", "5")
+    monkeypatch.setenv("MAX_REVIEW_REVISIONS", "4")
+
+    settings = load_settings(env_file=None)
+
+    assert settings.max_task_attempts == 5
+    assert settings.max_review_revisions == 4
+
+
+def test_limit_below_one_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_MODEL", "test-model")
+    monkeypatch.setenv("LLM_BASE_URL", "http://127.0.0.1:9")
+    monkeypatch.setenv("MAX_TASK_ATTEMPTS", "0")
+
+    with pytest.raises(ConfigurationError) as exc_info:
+        load_settings(env_file=None)
+
+    message = str(exc_info.value)
+    assert "max_task_attempts" in message
+    assert "0" not in message
+
+
 def test_startup_fails_when_settings_are_invalid(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LLM_MODEL", _SECRET_MODEL)
     monkeypatch.setenv("LLM_BASE_URL", "ftp://example.test/models")

@@ -28,5 +28,5 @@ Roadmap step 1 needs a Python package, a dependency manager, environment-based s
 ## Consequences
 
 - Later agents call `LLMProvider.generate`. Provider adapters are not implemented in this step.
-- [conventions.md](../conventions.md) still says the package name is TBD and shows `providers/`, `state.py`, and a top-level `config.py`. That file was not edited in this step. A later docs pass should align it with this record.
+- [conventions.md](../conventions.md) now uses this package name, layout, settings loader, test runner, and log format.
 - `make` is not installed on the current Windows machine. The Makefile targets are `uv sync`, `uv run uvicorn`, `uv run pytest`, and `uv run ruff check`.

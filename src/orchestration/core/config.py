@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     llm_provider: str = Field(default="ollama", min_length=1)
     llm_model: str = Field(min_length=1)
     llm_base_url: AnyHttpUrl
+    max_task_attempts: int = Field(default=3, ge=1)
+    max_review_revisions: int = Field(default=2, ge=1)
 
     @field_validator("llm_provider", "llm_model", mode="before")
     @classmethod
@@ -58,6 +60,9 @@ _ERROR_TEXT = {
     "url_scheme": "URL scheme must be http or https",
     "url_type": "invalid URL",
     "value_error": "invalid value",
+    "greater_than_equal": "must be at least 1",
+    "int_parsing": "must be an integer",
+    "int_type": "must be an integer",
 }
 
 
