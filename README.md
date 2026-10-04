@@ -17,7 +17,7 @@ Dependency versions are pinned in `pyproject.toml` and locked in `uv.lock`.
 uv sync
 ```
 
-Copy `.env.example` to `.env`, then set `LLM_MODEL` and `LLM_BASE_URL`. `LLM_PROVIDER` defaults to `ollama` when it is unset. Provider name, model name, and base URL are read from the environment only. `.env` is gitignored. Do not commit it.
+Copy `.env.example` to `.env`, then set `LLM_MODEL` and `LLM_BASE_URL`. `LLM_PROVIDER` defaults to `ollama` when it is unset. Set `SEARCH_API_KEY` for the Research Agent. `SEARCH_PROVIDER` defaults to `tavily`. Provider names, the model name, the base URL, and the search key are read from the environment only. `.env` is gitignored. Do not commit it.
 
 `make install` runs the same `uv sync` command when `make` is available.
 

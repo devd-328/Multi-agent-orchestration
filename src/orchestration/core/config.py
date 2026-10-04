@@ -1,4 +1,4 @@
-from pydantic import AnyHttpUrl, Field, ValidationError, field_validator
+from pydantic import AnyHttpUrl, Field, SecretStr, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from orchestration.core.errors import ConfigurationError
@@ -17,10 +17,26 @@ class Settings(BaseSettings):
     llm_provider: str = Field(default="ollama", min_length=1)
     llm_model: str = Field(min_length=1)
     llm_base_url: AnyHttpUrl
+    llm_timeout_seconds: float = Field(default=60, gt=0)
     max_task_attempts: int = Field(default=3, ge=1)
     max_review_revisions: int = Field(default=2, ge=1)
+    max_plan_attempts: int = Field(default=3, ge=1)
+    search_provider: str = Field(default="tavily", min_length=1)
+    search_api_key: SecretStr | None = None
+    search_timeout_seconds: float = Field(default=20, gt=0)
+    max_search_queries: int = Field(default=3, ge=1, le=10)
+    max_results_per_query: int = Field(default=5, ge=1, le=20)
+    max_source_chars: int = Field(default=2000, ge=1)
+    max_research_attempts: int = Field(default=3, ge=1)
 
-    @field_validator("llm_provider", "llm_model", mode="before")
+    @field_validator("search_api_key", mode="before")
+    @classmethod
+    def blank_key_is_missing(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @field_validator("llm_provider", "llm_model", "search_provider", mode="before")
     @classmethod
     def require_text(cls, value: object) -> object:
         if not isinstance(value, str):
@@ -61,8 +77,12 @@ _ERROR_TEXT = {
     "url_type": "invalid URL",
     "value_error": "invalid value",
     "greater_than_equal": "must be at least 1",
+    "greater_than": "must be greater than zero",
+    "less_than_equal": "is above the allowed maximum",
     "int_parsing": "must be an integer",
     "int_type": "must be an integer",
+    "float_parsing": "must be a number",
+    "float_type": "must be a number",
 }
 
 

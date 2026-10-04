@@ -10,6 +10,7 @@ V1 scope: [vision.md](vision.md). Agent specs: [agents.md](agents.md). State: [s
 - **Specialist agents:** one narrow job each. V1 specialist: Research.
 - **Reviewer:** approves or rejects specialist output. Does not do the specialist job.
 - **Model provider:** configurable adapter. Ollama now, vLLM later.
+- **Search provider:** configurable adapter for web search. Tavily now. The Research Agent calls only the `SearchProvider` interface.
 - **Qdrant:** part of the chosen stack. Role TBD.
 - **PostgreSQL:** part of the chosen stack. Role TBD.
 - **Langfuse:** observability. Roadmap step 8. Not part of the V1 workflow.
@@ -49,4 +50,4 @@ Handle:
 - Reviewer rejection
 - Partial failure (some tasks done, at least one failed)
 
-Retries are bounded. Limit: TBD. No infinite retry loops. No silent failures. Invalid model output is a failure, not a final answer.
+Retries are bounded. `max_plan_attempts` defaults to 3, `max_research_attempts` defaults to 3, `max_task_attempts` defaults to 3, and `max_review_revisions` defaults to 2. No infinite retry loops. No silent failures. Invalid model output is a failure, not a final answer.
