@@ -2,13 +2,13 @@
 
 Build in this order. Do not skip ahead.
 
-`[ ]` not started. `[x]` done. Step 4 is done. Step 5 is next.
+`[ ]` not started. `[x]` done. Step 5 is done. Step 6 is next.
 
 - [x] 1. Core structure
 - [x] 2. LangGraph state
 - [x] 3. Supervisor
 - [x] 4. Research Agent
-- [ ] 5. Reviewer
+- [x] 5. Reviewer
 - [ ] 6. Basic workflow
 - [ ] 7. Testing
 - [ ] 8. Observability (Langfuse)

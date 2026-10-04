@@ -50,4 +50,4 @@ Handle:
 - Reviewer rejection
 - Partial failure (some tasks done, at least one failed)
 
-Retries are bounded. `max_plan_attempts` defaults to 3, `max_research_attempts` defaults to 3, `max_task_attempts` defaults to 3, and `max_review_revisions` defaults to 2. No infinite retry loops. No silent failures. Invalid model output is a failure, not a final answer.
+Retries are bounded. `max_plan_attempts` defaults to 3, `max_research_attempts` defaults to 3, `max_review_attempts` defaults to 3, `max_task_attempts` defaults to 3, and `max_review_revisions` defaults to 2. No infinite retry loops. No silent failures. Invalid model output is a failure, not a final answer.

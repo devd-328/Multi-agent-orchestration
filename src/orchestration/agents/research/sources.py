@@ -54,6 +54,17 @@ def format_sources(sources: Sequence[SearchResult]) -> list[str]:
     ]
 
 
+def format_excerpts(sources: Sequence[SearchResult], max_chars: int | None) -> list[str]:
+    """Return the `TaskResult.excerpts` entries. Entry n is the text behind source n.
+
+    This is the same text the summary was written from, cut to `max_chars` when
+    that limit is set.
+    """
+    if max_chars is None:
+        return [source.content for source in sources]
+    return [source.content[:max_chars] for source in sources]
+
+
 def _url_key(url: str) -> tuple[str, str, str, str] | None:
     parts = urlsplit(url.strip())
     if parts.scheme.lower() not in {"http", "https"} or not parts.netloc:

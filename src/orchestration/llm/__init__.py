@@ -1,5 +1,5 @@
 from orchestration.llm.errors import LLMError
-from orchestration.llm.factory import create_llm_provider
+from orchestration.llm.factory import create_llm_provider, create_reviewer_llm_provider
 from orchestration.llm.fake import FakeLLMProvider
 from orchestration.llm.provider import LLMProvider
 
@@ -8,4 +8,5 @@ __all__ = [
     "LLMError",
     "LLMProvider",
     "create_llm_provider",
+    "create_reviewer_llm_provider",
 ]

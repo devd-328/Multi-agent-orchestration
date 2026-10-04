@@ -28,7 +28,7 @@ Status: V1. Code: `src/orchestration/agents/research/`.
 
 - **Role:** Run one research task from the plan. Search the web, then summarize only what the retrieved sources say, with a source number on each claim.
 - **Inputs:** one `Task` assigned to `research`; the `TaskResult` of each task in its `depends_on`; an `LLMProvider`; a `SearchProvider`; `ResearchLimits` (built from settings).
-- **Outputs:** an update with its own task and its own `TaskResult`. `output` is the cited summary. `sources` lists every retrieved source as `[n] title (url)`, and entry n is the source that citation `[n]` refers to. A result with partial search failures is still `done` and carries the failure text in `error`.
+- **Outputs:** an update with its own task and its own `TaskResult`. `output` is the cited summary. `sources` lists every retrieved source as `[n] title (url)`, and entry n is the source that citation `[n]` refers to. `excerpts[n - 1]` is the text of that source the summary was written from, cut to `max_source_chars` and then to `max_review_excerpt_chars`, so the Reviewer can check claims. A result with partial search failures is still `done` and carries the failure text in `error`.
 - **Tools:** `SearchProvider.search` only. The agent cannot send, publish, spend, or write anywhere. The Tavily adapter sits behind `SearchProvider`, selected by `search_provider`. The key comes from `SEARCH_API_KEY` and is never logged.
 - **Steps:**
   1. Ask the model for 1 to `max_search_queries` search queries as JSON. Invalid JSON, zero queries, too many queries, or an invalid query is sent back with the error, up to `max_research_attempts` model calls (default 3).
@@ -91,10 +91,17 @@ Status: planned
 
 ## Reviewer
 
-Status: V1
+Status: V1. Code: `src/orchestration/agents/reviewer/`.
 
-- **Role:** Check specialist output against the user goal. Approve or reject with notes. Do not redo the specialist work.
-- **Inputs:** user goal; specialist output; shared state.
-- **Outputs:** `approved` or `rejected`, plus notes.
-- **Tools:** read-only. Exact tools: TBD. No side-effect tools.
-- **Failure:** Missing or invalid output is a rejection with notes. Rejection returns to the Supervisor. Retries are bounded (limit TBD). Do not loop without a bound.
+- **Role:** Check the completed task results against the user goal. Report a verdict with issues. Do not redo the specialist work and do not search.
+- **Inputs:** `goal`, `tasks`, `results`, and `review` from shared state; an `LLMProvider`; `ReviewerLimits` (built from settings).
+- **Outputs:** a `Review` with a verdict (`approved`, `revise`, or `rejected`), the issues, and the revision count, plus the run `status` from `apply_review`. Each issue is stored as text: `[blocking] task t1: what is wrong and what to change`, or `[minor] goal: ...` for an issue about the goal as a whole. Blocking issues are listed first. If the review cannot be completed, the output is run `status` `failed` and one `StateError` from `reviewer`, and no `Review`.
+- **Tools:** none. The Reviewer reads state and calls the shared model interface. It cannot search, send, publish, or write anywhere else. The provider can use a different model for review when `reviewer_model` is set (see Config in [conventions.md](conventions.md)).
+- **Order of checks:**
+  1. Deterministic checks, no model call. Skipped tasks are ignored. Every other task needs a result, that result must not be `failed` or unfinished, and the task must be `done`. A `done` result that carries an `error` is a tolerated partial failure (the Research Agent records failed searches that way) and is passed to the model as a note. Each summary must be non-empty. Every `[n]` citation must map to a source of that result. A result with sources must cite at least one, and each cited source needs a non-empty excerpt. A result with no sources must state "no useful sources". If every result has no sources, the review is `revise`. Any hard failure returns a verdict at once and lists every failing task. The verdict is `rejected` when no reviewed task has a `done` result, and `revise` otherwise. The Supervisor routes both the same way until the revision limit.
+  2. Model review, only if step 1 passes. The prompt (version `reviewer-v1`, in `prompt.py`) carries the goal, each task description, each summary, and the numbered source excerpts, and asks for (a) completeness, (b) claims supported by the cited excerpt, (c) no invented names, dates, or numbers, (d) quality, and (e) policy: no external action asked for or claimed, no secrets or personal data. The model returns JSON with a verdict and issues, each with a severity (`blocking` or `minor`), a task id or null, and a description.
+- **Validation:** `approved` needs zero blocking issues. `revise` and `rejected` need at least one blocking issue. A blocking description must be at least 10 characters, which is a length check only and cannot prove the wording is actionable. Unknown verdicts or severities, unknown task ids, more than 20 issues, and descriptions over 500 characters are invalid. Invalid output is sent back with the error, up to `max_review_attempts` model calls (default 3).
+- **Fail closed:** A provider error, a missing or overlong goal, or invalid output after the attempt limit fails the run with a safe error. The Reviewer never defaults to `approved`.
+- **Revisions:** The count and the stop come from `apply_review` and `max_review_revisions`. When the limit is already reached, the Reviewer still runs and reports its honest verdict. The count does not grow past the limit, the run `status` is `failed`, and the Supervisor's `route` returns `fail`.
+- **Untrusted content:** The goal, task text, summaries, notes, and excerpts are placed in the prompt as delimited data. Text that looks like a prompt delimiter is broken up first, and the prompt tells the model to ignore instructions inside the data. This does not stop a model from being fooled. The deterministic checks and the verdict rules run in code regardless of what the data says.
+- **Logs:** agent id, run status, verdict, stage (`checks` or `model`), blocking and minor counts, revision count, and duration in milliseconds. No goals, summaries, excerpts, prompts, or keys.

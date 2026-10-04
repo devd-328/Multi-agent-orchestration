@@ -28,12 +28,16 @@ class Settings(BaseSettings):
     max_results_per_query: int = Field(default=5, ge=1, le=20)
     max_source_chars: int = Field(default=2000, ge=1)
     max_research_attempts: int = Field(default=3, ge=1)
+    max_review_excerpt_chars: int = Field(default=2000, ge=1)
+    max_review_attempts: int = Field(default=3, ge=1)
+    reviewer_model: str | None = None
 
-    @field_validator("search_api_key", mode="before")
+    @field_validator("search_api_key", "reviewer_model", mode="before")
     @classmethod
-    def blank_key_is_missing(cls, value: object) -> object:
-        if isinstance(value, str) and not value.strip():
-            return None
+    def blank_value_is_missing(cls, value: object) -> object:
+        if isinstance(value, str):
+            stripped = value.strip()
+            return stripped or None
         return value
 
     @field_validator("llm_provider", "llm_model", "search_provider", mode="before")

@@ -220,6 +220,67 @@ def test_invalid_search_settings_fail_without_values(
     assert "tvly-secret-value" not in message
 
 
+_REVIEW_ENV = ("MAX_REVIEW_EXCERPT_CHARS", "MAX_REVIEW_ATTEMPTS", "REVIEWER_MODEL")
+
+
+def _review_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in _REVIEW_ENV:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("LLM_MODEL", "test-model")
+    monkeypatch.setenv("LLM_BASE_URL", "http://127.0.0.1:9")
+
+
+def test_review_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    _review_env(monkeypatch)
+
+    settings = load_settings(env_file=None)
+
+    assert settings.max_review_excerpt_chars == 2000
+    assert settings.max_review_attempts == 3
+    assert settings.reviewer_model is None
+
+
+def test_review_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    _review_env(monkeypatch)
+    monkeypatch.setenv("MAX_REVIEW_EXCERPT_CHARS", "500")
+    monkeypatch.setenv("MAX_REVIEW_ATTEMPTS", "2")
+    monkeypatch.setenv("REVIEWER_MODEL", " reviewer-model ")
+
+    settings = load_settings(env_file=None)
+
+    assert settings.max_review_excerpt_chars == 500
+    assert settings.max_review_attempts == 2
+    assert settings.reviewer_model == "reviewer-model"
+
+
+def test_blank_reviewer_model_counts_as_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    _review_env(monkeypatch)
+    monkeypatch.setenv("REVIEWER_MODEL", "   ")
+
+    assert load_settings(env_file=None).reviewer_model is None
+
+
+@pytest.mark.parametrize(
+    ("name", "field"),
+    [
+        ("MAX_REVIEW_EXCERPT_CHARS", "max_review_excerpt_chars"),
+        ("MAX_REVIEW_ATTEMPTS", "max_review_attempts"),
+    ],
+)
+def test_review_limits_below_one_fail(
+    monkeypatch: pytest.MonkeyPatch,
+    name: str,
+    field: str,
+) -> None:
+    _review_env(monkeypatch)
+    monkeypatch.setenv(name, "0")
+
+    with pytest.raises(ConfigurationError) as exc_info:
+        load_settings(env_file=None)
+
+    assert field in str(exc_info.value)
+
+
 def test_limit_below_one_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LLM_MODEL", "test-model")
     monkeypatch.setenv("LLM_BASE_URL", "http://127.0.0.1:9")

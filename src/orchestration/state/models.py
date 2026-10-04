@@ -68,12 +68,18 @@ class Task(_StateModel):
 
 
 class TaskResult(_StateModel):
-    """Specialist output for one task. Sources are citations, not prompts."""
+    """Specialist output for one task. Sources are citations, not prompts.
+
+    `excerpts[i]` is the bounded text excerpt of `sources[i]`, so a reviewer can
+    check a claim without the original page. It is empty or the same length as
+    `sources`. An entry may be empty text.
+    """
 
     task_id: str = Field(min_length=1)
     agent: AgentId
     output: str = ""
     sources: list[str] = Field(default_factory=list)
+    excerpts: list[str] = Field(default_factory=list)
     status: TaskStatus
     error: str | None = None
 
@@ -83,6 +89,8 @@ class TaskResult(_StateModel):
             raise ValueError("task_id must not be empty")
         if any(_blank(source) for source in self.sources):
             raise ValueError("sources must not contain an empty entry")
+        if self.excerpts and len(self.excerpts) != len(self.sources):
+            raise ValueError("excerpts must match sources one to one")
         if self.status is TaskStatus.FAILED and (self.error is None or _blank(self.error)):
             raise ValueError("failed status requires an error")
         if self.status is TaskStatus.DONE and _blank(self.output):

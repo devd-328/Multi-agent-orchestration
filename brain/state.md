@@ -35,6 +35,7 @@ TaskResult:
   agent: agent id
   output: string                       # findings or other specialist output
   sources: list[string]                # citations, not prompts
+  excerpts: list[string]               # excerpts[i] is the bounded text behind sources[i]
   status: same set as Task status
   error: string | null                 # required when status is failed
 ```
@@ -53,9 +54,11 @@ StateError:
   task_id: string | null
 ```
 
+`excerpts` is empty or the same length as `sources`. An entry can be empty text. A reviewer needs it because a title and a url cannot show whether a claim is supported. The Research Agent fills it with the text it summarized, cut to `max_review_excerpt_chars`. An excerpt is source text, so treat it as untrusted data. Results written before this field existed have no excerpts and stay valid.
+
 V1 agent ids live in `AgentId`: `supervisor`, `research`, `reviewer`. A new agent is a new registry member. Task and result fields already use that type.
 
-`agents.md` says the reviewer returns approved or rejected. This schema also allows `revise`, which sends the work back for another bounded pass.
+The Reviewer can return `approved`, `revise`, or `rejected`. `revise` and `rejected` share one bounded counter and the Supervisor routes them the same way. The Reviewer uses `rejected` when no result is usable, and `revise` when another pass can fix the work.
 
 `final_output` is set only after `review.verdict` is `approved`. Which node writes it: TBD. Approval does not by itself mark the run done.
 
@@ -96,6 +99,6 @@ The helpers take these numbers as arguments. They do not read the environment th
 
 - The Supervisor writes `tasks` and the run `status` while planning. It does not write specialist `results`.
 - A specialist writes only its own `results` entry and its own task.
-- The Reviewer writes only `review`.
+- The Reviewer writes `review` and the run `status` that `apply_review` returns (`reviewing`, or `failed` when the revision limit is reached). If a review cannot be completed, it writes `status` `failed` and one error, and no `review`. It never writes `tasks` or `results`.
 - Append errors. Do not clear another task's result.
 - Status values are only the sets above.

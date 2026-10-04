@@ -633,4 +633,57 @@ def test_limits_come_from_settings(monkeypatch: pytest.MonkeyPatch) -> None:
         max_source_chars=900,
         max_attempts=2,
         max_task_attempts=5,
+        max_review_excerpt_chars=2000,
     )
+
+
+def test_excerpts_match_sources_and_carry_the_summarized_text() -> None:
+    llm = FakeLLMProvider([_queries("q"), "Fact [1][2]."])
+    search = FakeSearchProvider([[_hit(1, content="a" * 500), _hit(2)]])
+
+    update = _run(llm, search, limits=_limits(max_source_chars=200))
+
+    result = _result(update)
+    assert len(result.excerpts) == len(result.sources) == 2
+    assert result.excerpts[0] == "a" * 200
+    assert result.excerpts[1] == "Fact number 2 about technology events."
+    assert result.excerpts[0] in llm.calls[1]
+
+
+def test_excerpts_are_capped_by_the_review_excerpt_limit() -> None:
+    llm = FakeLLMProvider([_queries("q"), "Fact [1]."])
+    search = FakeSearchProvider([[_hit(1, content="b" * 150)]])
+
+    update = _run(
+        llm,
+        search,
+        limits=_limits(max_source_chars=200, max_review_excerpt_chars=40),
+    )
+
+    assert _result(update).excerpts == ["b" * 40]
+    assert "b" * 150 in llm.calls[1]
+
+
+def test_failed_summary_keeps_sources_and_their_excerpts() -> None:
+    llm = FakeLLMProvider([_queries("q"), "No citation here."])
+    search = FakeSearchProvider([[_hit(1)]])
+
+    update = _run(llm, search, limits=_limits(max_attempts=1, max_task_attempts=1))
+
+    result = _result(update)
+    assert result.status is TaskStatus.FAILED
+    assert result.excerpts == ["Fact number 1 about technology events."]
+    assert len(result.excerpts) == len(result.sources)
+
+
+def test_no_results_result_has_no_excerpts() -> None:
+    update = _run(FakeLLMProvider([_queries("q")]), FakeSearchProvider([[]]))
+
+    result = _result(update)
+    assert result.sources == []
+    assert result.excerpts == []
+
+
+def test_review_excerpt_limit_below_one_is_rejected() -> None:
+    with pytest.raises(StateUpdateError, match="max_review_excerpt_chars must be at least 1"):
+        _limits(max_review_excerpt_chars=0)

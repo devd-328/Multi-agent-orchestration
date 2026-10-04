@@ -6,7 +6,11 @@ from typing import Self, TypedDict
 
 from orchestration.agents.research.parsing import Rejected, check_summary, parse_queries
 from orchestration.agents.research.prompt import build_query_prompt, build_summary_prompt
-from orchestration.agents.research.sources import collect_sources, format_sources
+from orchestration.agents.research.sources import (
+    collect_sources,
+    format_excerpts,
+    format_sources,
+)
 from orchestration.core.config import Settings
 from orchestration.llm import LLMError, LLMProvider
 from orchestration.search import SearchError, SearchProvider, SearchResult
@@ -32,17 +36,22 @@ class ResearchUpdate(TypedDict, total=False):
 
 @dataclass(frozen=True)
 class ResearchLimits:
-    """Bounds for one research run. Every limit is at least 1."""
+    """Bounds for one research run. Every limit is at least 1.
+
+    `max_review_excerpt_chars` caps the excerpt stored with each source. When it
+    is unset, the excerpt is the full text kept under `max_source_chars`.
+    """
 
     max_search_queries: int
     max_results_per_query: int
     max_source_chars: int
     max_attempts: int
     max_task_attempts: int
+    max_review_excerpt_chars: int | None = None
 
     def __post_init__(self) -> None:
         for name, value in vars(self).items():
-            if value < 1:
+            if value is not None and value < 1:
                 raise StateUpdateError(f"{name} must be at least 1.")
 
     @classmethod
@@ -53,6 +62,7 @@ class ResearchLimits:
             max_source_chars=settings.max_source_chars,
             max_attempts=settings.max_research_attempts,
             max_task_attempts=settings.max_task_attempts,
+            max_review_excerpt_chars=settings.max_review_excerpt_chars,
         )
 
 
@@ -151,6 +161,7 @@ def _research(
         agent=AgentId.RESEARCH,
         output=summary,
         sources=format_sources(sources),
+        excerpts=format_excerpts(sources, limits.max_review_excerpt_chars),
         status=TaskStatus.DONE,
         error=_partial_error(stats),
     )
@@ -282,6 +293,7 @@ def _finish_failed(
         task_id=task.id,
         agent=AgentId.RESEARCH,
         sources=format_sources(failure.sources),
+        excerpts=format_excerpts(failure.sources, limits.max_review_excerpt_chars),
         status=TaskStatus.FAILED,
         error=message,
     )
