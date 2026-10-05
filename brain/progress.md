@@ -10,6 +10,7 @@
 - 2026-10-04: Roadmap step 3, Supervisor. Planning, routing, and an Ollama adapter behind `LLMProvider`. No Research Agent, Reviewer, or workflow graph. See [agents.md](agents.md).
 - 2026-10-05: Roadmap step 4, Research Agent. Search layer with a Tavily adapter behind `SearchProvider`, and the agent that returns a cited `TaskResult`. No Reviewer or workflow graph. See [agents.md](agents.md).
 - 2026-10-05: Roadmap step 5, Reviewer. Deterministic checks, then a model review with a validated verdict, on branch `step-5-reviewer`. Added `TaskResult.excerpts` and filled it in the Research Agent. Declared `httpx` in `pyproject.toml`. No workflow graph or final answer composition. See [agents.md](agents.md).
+- 2026-10-05: Roadmap step 6, Basic workflow. One LangGraph graph runs plan, research, review, revise, finalize, and fail, routed only by the Supervisor's `route`. `run_workflow`, `build_default_providers`, and the CLI `python -m orchestration run "<goal>"`. The Research Agent accepts revise feedback. No new agents, API endpoint, persistence, or tracing. See [architecture.md](architecture.md).
 
 ## In progress
 
@@ -21,4 +22,4 @@
 
 ## Next step
 
-- Roadmap step 6, Basic workflow. Not started.
+- Roadmap step 7, Testing. Not started.

@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     max_review_excerpt_chars: int = Field(default=2000, ge=1)
     max_review_attempts: int = Field(default=3, ge=1)
     reviewer_model: str | None = None
+    max_graph_steps: int = Field(default=100, ge=1)
 
     @field_validator("search_api_key", "reviewer_model", mode="before")
     @classmethod

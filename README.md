@@ -33,6 +33,24 @@ Open `GET /health`. A healthy process returns status `ok` and the package versio
 
 Startup reads settings before the server accepts traffic. Missing or invalid settings stop the process. The error names the setting and the error type, and it does not print setting values.
 
+## Run a goal
+
+The workflow plans the goal, researches it on the web, reviews the result, and prints a final answer with sources. It needs a model provider (Ollama by default, with `LLM_MODEL` and `LLM_BASE_URL` set) and a search key (`SEARCH_API_KEY`).
+
+```text
+uv run python -m orchestration run "Research upcoming technology events and summarize the useful findings with sources."
+```
+
+`make run-goal GOAL="..."` runs the same command when `make` is available.
+
+- On success, the final answer is printed to stdout as markdown, one section per task with its own numbered sources, and the exit code is 0.
+- On failure, nothing is printed to stdout. A safe summary of the errors goes to stderr, and the exit code is 1. A review that never approves ends here too, after `MAX_REVIEW_REVISIONS` tries.
+- Missing or invalid configuration, such as a missing `SEARCH_API_KEY`, stops the run before any model call. The message names the setting and never prints its value. The exit code is 2.
+- Logs are JSON lines on stderr. Each run has a run id, printed on stderr and on every log line of that run.
+- `MAX_GRAPH_STEPS` (default 100) caps the number of graph steps, so a bug cannot loop forever.
+
+The run makes model calls and web searches only. It sends nothing, publishes nothing, and writes no files.
+
 ## Test and lint
 
 ```text

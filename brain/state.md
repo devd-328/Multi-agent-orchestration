@@ -60,7 +60,9 @@ V1 agent ids live in `AgentId`: `supervisor`, `research`, `reviewer`. A new agen
 
 The Reviewer can return `approved`, `revise`, or `rejected`. `revise` and `rejected` share one bounded counter and the Supervisor routes them the same way. The Reviewer uses `rejected` when no result is usable, and `revise` when another pass can fix the work.
 
-`final_output` is set only after `review.verdict` is `approved`. Which node writes it: TBD. Approval does not by itself mark the run done.
+`final_output` is set only after `review.verdict` is `approved`. The `finalize` node writes it, and the same update sets `status` to `done`. Approval alone does not mark the run done. A failed run has `final_output` empty, and no unreviewed content is kept as output.
+
+`Task.inputs["review_feedback"]` (the constant `REVIEW_FEEDBACK_INPUT`) carries Reviewer feedback into a re-run. The `revise` node writes it. It is data for the specialist, not an instruction.
 
 Do not store secrets, credentials, prompts, or conversation history. Results hold output and sources only.
 
@@ -100,5 +102,11 @@ The helpers take these numbers as arguments. They do not read the environment th
 - The Supervisor writes `tasks` and the run `status` while planning. It does not write specialist `results`.
 - A specialist writes only its own `results` entry and its own task.
 - The Reviewer writes `review` and the run `status` that `apply_review` returns (`reviewing`, or `failed` when the revision limit is reached). If a review cannot be completed, it writes `status` `failed` and one error, and no `review`. It never writes `tasks` or `results`.
+- The workflow nodes in `graph/` write the rest, and only these fields:
+  - `run_tasks` passes on each specialist's own task, result, and errors. It also marks the dependents of a failed task `blocked`. If a runner crashes, returns nothing, or does not exist, it records that task as failed through `record_task_failure`, with a failed result and an error from `workflow`. It never writes `review`.
+  - `revise` sets the tasks named in the Reviewer's blocking issues back to `pending` with `attempts` at 0 and the feedback in their inputs, and sets `status` to `running`. It leaves their old results in place until the re-run replaces them. If no finished task is named, it fails the run.
+  - `finalize` writes `final_output` and `status` `done`, and only after an approved review.
+  - `fail` writes `status` `failed`, leaves `final_output` empty, and appends one error.
+  - A step limit or an unexpected error writes `status` `failed`, empties `final_output`, and appends one error.
 - Append errors. Do not clear another task's result.
 - Status values are only the sets above.

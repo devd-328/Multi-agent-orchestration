@@ -1,7 +1,12 @@
 import json
 import logging
 import sys
+from contextvars import ContextVar
 from datetime import UTC, datetime
+from typing import TextIO
+
+run_id_var: ContextVar[str | None] = ContextVar("run_id", default=None)
+"""Id of the workflow run in progress. The workflow sets it, the log filter reads it."""
 
 _REDACTED = "[REDACTED]"
 _SECRET_MARKERS = (
@@ -76,10 +81,21 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(payload, default=str)
 
 
-def configure_logging() -> None:
-    """Send structured logs to stdout. Does not log environment values."""
-    handler = logging.StreamHandler(sys.stdout)
+class RunIdFilter(logging.Filter):
+    """Add the current run id to every record, so one run can be followed in the logs."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        run_id = run_id_var.get()
+        if run_id is not None and not hasattr(record, "run_id"):
+            record.run_id = run_id
+        return True
+
+
+def configure_logging(stream: TextIO | None = None) -> None:
+    """Send structured logs to stdout, or to `stream`. Does not log environment values."""
+    handler = logging.StreamHandler(stream if stream is not None else sys.stdout)
     handler.setFormatter(JsonFormatter())
+    handler.addFilter(RunIdFilter())
     root = logging.getLogger()
     root.handlers.clear()
     root.setLevel(logging.INFO)

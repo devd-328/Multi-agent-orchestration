@@ -5,6 +5,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from orchestration.state.registry import AgentId
 
+REVIEW_FEEDBACK_INPUT = "review_feedback"
+"""Task input key that carries Reviewer feedback into a re-run. The value is data."""
+
 
 class _StateModel(BaseModel):
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)

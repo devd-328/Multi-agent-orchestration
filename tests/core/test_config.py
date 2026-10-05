@@ -281,6 +281,28 @@ def test_review_limits_below_one_fail(
     assert field in str(exc_info.value)
 
 
+def test_graph_step_limit_default_and_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_MODEL", "test-model")
+    monkeypatch.setenv("LLM_BASE_URL", "http://127.0.0.1:9")
+    monkeypatch.delenv("MAX_GRAPH_STEPS", raising=False)
+
+    assert load_settings(env_file=None).max_graph_steps == 100
+
+    monkeypatch.setenv("MAX_GRAPH_STEPS", "25")
+    assert load_settings(env_file=None).max_graph_steps == 25
+
+
+def test_graph_step_limit_below_one_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_MODEL", "test-model")
+    monkeypatch.setenv("LLM_BASE_URL", "http://127.0.0.1:9")
+    monkeypatch.setenv("MAX_GRAPH_STEPS", "0")
+
+    with pytest.raises(ConfigurationError) as exc_info:
+        load_settings(env_file=None)
+
+    assert "max_graph_steps" in str(exc_info.value)
+
+
 def test_limit_below_one_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LLM_MODEL", "test-model")
     monkeypatch.setenv("LLM_BASE_URL", "http://127.0.0.1:9")
