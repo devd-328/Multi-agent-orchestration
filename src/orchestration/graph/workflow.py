@@ -1,6 +1,7 @@
 import logging
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -63,6 +64,7 @@ def run_workflow(
     reviewer_llm: LLMProvider | None = None,
     settings: Settings | None = None,
     run_id: str | None = None,
+    on_update: Callable[[AgentState], None] | None = None,
 ) -> AgentState:
     """Run a goal from plan to final answer and return the final state.
 
@@ -70,6 +72,10 @@ def run_workflow(
     outcome, including a step limit or an internal error, is returned as a state
     with `status` `failed`, no `final_output`, and at least one recorded error.
     `reviewer_llm` defaults to `llm`.
+
+    `on_update`, when given, is called with the state after each graph step so a
+    caller can show progress. It is read-only. An error inside it is logged by
+    type and never stops the run.
     """
 
     active = settings if settings is not None else load_settings()
@@ -87,7 +93,9 @@ def run_workflow(
     started = time.monotonic()
     try:
         logger.info("workflow_started", extra={"run_id": identifier, "goal_chars": len(goal)})
-        final = _execute(graph, initial_state(goal), active.max_graph_steps, identifier)
+        final = _execute(
+            graph, initial_state(goal), active.max_graph_steps, identifier, on_update
+        )
         logger.info(
             "workflow_finished",
             extra={
@@ -107,6 +115,7 @@ def _execute(
     state: AgentState,
     step_limit: int,
     run_id: str,
+    on_update: Callable[[AgentState], None] | None = None,
 ) -> AgentState:
     # Streaming keeps the last good state if the step limit or an error stops the run.
     last = state
@@ -116,7 +125,7 @@ def _execute(
             config={"recursion_limit": step_limit},
             stream_mode="values",
         ):
-            pass
+            _notify(on_update, last, run_id)
     except GraphRecursionError:
         logger.error("workflow_step_limit", extra={"run_id": run_id, "step_limit": step_limit})
         return _stopped(last, f"Workflow stopped after reaching the step limit ({step_limit}).")
@@ -127,6 +136,22 @@ def _execute(
         )
         return _stopped(last, f"Workflow stopped on an internal error ({type(exc).__name__}).")
     return last
+
+
+def _notify(
+    on_update: Callable[[AgentState], None] | None,
+    state: AgentState,
+    run_id: str,
+) -> None:
+    if on_update is None:
+        return
+    try:
+        on_update(state)
+    except Exception as exc:
+        logger.error(
+            "workflow_update_callback_error",
+            extra={"run_id": run_id, "error_type": type(exc).__name__},
+        )
 
 
 def _stopped(state: AgentState, message: str) -> AgentState:

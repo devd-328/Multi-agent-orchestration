@@ -31,6 +31,10 @@ uv run uvicorn orchestration.api.app:app --host 127.0.0.1 --port 8000
 
 Open `GET /health`. A healthy process returns status `ok` and the package version.
 
+Open `http://127.0.0.1:8000/` for the web interface. Type a goal, press Run, and watch the plan, research, and review steps. The final answer shows as markdown with numbered sources, and you can copy or download it. The page needs the same settings as the command line (`LLM_MODEL`, `LLM_BASE_URL`, `SEARCH_API_KEY`) and shows what is missing. `.env` is read on each run.
+
+API used by the page: `GET /api/status`, `POST /api/runs` with `{"goal": "..."}`, `GET /api/runs`, and `GET /api/runs/{id}`. At most 2 runs work at once. Runs are kept in memory only and are lost on restart. A running goal cannot be cancelled yet.
+
 Startup reads settings before the server accepts traffic. Missing or invalid settings stop the process. The error names the setting and the error type, and it does not print setting values.
 
 ## Run a goal

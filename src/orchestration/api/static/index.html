@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Multi-Agent Orchestration System</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f46e5'/%3E%3Ccircle cx='16' cy='9' r='3' fill='white'/%3E%3Ccircle cx='8' cy='23' r='3' fill='white'/%3E%3Ccircle cx='24' cy='23' r='3' fill='white'/%3E%3Cpath d='M16 12v4M16 16l-6 5M16 16l6 5' stroke='white' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#goal">Skip to the goal box</a>
+
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" rx="8"></rect>
+        <circle cx="16" cy="9" r="3"></circle>
+        <circle cx="8" cy="23" r="3"></circle>
+        <circle cx="24" cy="23" r="3"></circle>
+        <path d="M16 12v4M16 16l-6 5M16 16l6 5"></path>
+      </svg>
+      <div>
+        <h1>Multi-Agent Orchestration</h1>
+        <p class="tagline">Plan, research, review, answer with sources</p>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <span id="setup-pill" class="pill pill-muted" role="status">Checking setup</span>
+      <button id="theme-toggle" class="icon-button" type="button" aria-label="Switch color theme" title="Switch color theme">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <main id="main">
+      <section class="card composer" aria-labelledby="goal-label">
+        <form id="goal-form" novalidate>
+          <label id="goal-label" for="goal">What should the agents research?</label>
+          <textarea id="goal" name="goal" rows="3" autocomplete="off" spellcheck="true"
+            placeholder="Describe a goal. The agents plan it, search the web, review the findings, and return an answer with sources."></textarea>
+          <div class="composer-foot">
+            <span id="counter" class="counter" aria-live="polite"></span>
+            <div class="composer-actions">
+              <span class="hint">Ctrl or Cmd + Enter to run</span>
+              <button id="run-button" class="button button-primary" type="submit">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>
+                <span>Run goal</span>
+              </button>
+            </div>
+          </div>
+        </form>
+        <div class="examples" aria-label="Example goals">
+          <span class="examples-label">Try</span>
+          <div id="examples" class="chips"></div>
+        </div>
+        <div id="banner" class="banner" role="alert" hidden></div>
+      </section>
+
+      <section id="empty-state" class="card steps-intro" aria-label="How it works">
+        <h2>How a run works</h2>
+        <ol class="intro-steps">
+          <li><span class="intro-number">1</span><div><strong>Plan</strong><p>The Supervisor breaks your goal into small research tasks.</p></div></li>
+          <li><span class="intro-number">2</span><div><strong>Research</strong><p>The Research Agent searches the web and summarizes only what the sources say.</p></div></li>
+          <li><span class="intro-number">3</span><div><strong>Review</strong><p>The Reviewer checks every claim. Weak work is sent back for another pass.</p></div></li>
+          <li><span class="intro-number">4</span><div><strong>Answer</strong><p>You get one markdown answer with numbered sources.</p></div></li>
+        </ol>
+      </section>
+
+      <section id="run-panel" class="card run-panel" aria-labelledby="run-title" hidden>
+        <div class="run-head">
+          <div class="run-head-text">
+            <p class="eyebrow">Run <span id="run-id" class="mono"></span></p>
+            <h2 id="run-title" class="run-goal"></h2>
+          </div>
+          <div class="run-head-meta">
+            <span id="run-badge" class="badge"></span>
+            <span id="run-elapsed" class="elapsed mono" aria-label="Elapsed time"></span>
+          </div>
+        </div>
+
+        <ol id="stepper" class="stepper" aria-label="Progress"></ol>
+        <p id="stage-caption" class="stage-caption" role="status" aria-live="polite"></p>
+
+        <div id="tasks-block" hidden>
+          <h3 class="section-title">Tasks <span id="tasks-count" class="muted"></span></h3>
+          <ul id="tasks" class="tasks"></ul>
+        </div>
+
+        <div id="review-block" class="review" hidden>
+          <h3 class="section-title">Reviewer</h3>
+          <div class="review-line"><span id="review-verdict" class="badge"></span><span id="review-revisions" class="muted"></span></div>
+          <ul id="review-issues" class="issues"></ul>
+        </div>
+
+        <div id="errors-block" class="errors" hidden>
+          <h3 class="section-title">What went wrong</h3>
+          <ul id="errors"></ul>
+          <button id="retry-button" class="button" type="button">Edit the goal and try again</button>
+        </div>
+      </section>
+
+      <section id="result-panel" class="card result" aria-labelledby="result-title" hidden>
+        <div class="result-head">
+          <h2 id="result-title">Final answer</h2>
+          <div class="result-actions">
+            <button id="copy-button" class="button" type="button">Copy markdown</button>
+            <button id="download-button" class="button" type="button">Download .md</button>
+          </div>
+        </div>
+        <article id="result-body" class="markdown"></article>
+      </section>
+    </main>
+
+    <aside class="card history" aria-labelledby="history-title">
+      <h2 id="history-title">Recent runs</h2>
+      <p class="muted small">Kept in memory while the server runs.</p>
+      <ul id="history" class="history-list"></ul>
+      <p id="history-empty" class="muted small">No runs yet.</p>
+    </aside>
+  </div>
+
+  <footer class="footer">
+    <span id="version" class="muted small"></span>
+    <span class="muted small">Answers come from retrieved sources. Check the links before you rely on them.</span>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

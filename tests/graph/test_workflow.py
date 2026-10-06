@@ -304,6 +304,49 @@ def test_reviewer_uses_its_own_provider_when_given(make_settings: MakeSettings) 
     assert not any("You are the Reviewer" in call for call in llm.calls)
 
 
+def test_on_update_sees_the_state_after_each_step_in_order(make_settings: MakeSettings) -> None:
+    llm = FakeLLMProvider(
+        [plan_json(task_json("t1")), queries_json("q"), "Fact [1].", APPROVED]
+    )
+    seen: list[tuple[RunStatus, list[TaskStatus]]] = []
+
+    state = run_workflow(
+        GOAL,
+        llm=llm,
+        search=FakeSearchProvider([[hit(1)]]),
+        settings=make_settings(),
+        on_update=lambda current: seen.append(
+            (current["status"], [task.status for task in current["tasks"]])
+        ),
+    )
+
+    assert state["status"] is RunStatus.DONE
+    assert seen[0] == (RunStatus.PLANNING, [])
+    assert seen[1] == (RunStatus.RUNNING, [TaskStatus.PENDING])
+    assert seen[2] == (RunStatus.RUNNING, [TaskStatus.DONE])
+    assert seen[-1][0] is RunStatus.DONE
+
+
+def test_an_error_in_on_update_never_stops_the_run(make_settings: MakeSettings) -> None:
+    llm = FakeLLMProvider(
+        [plan_json(task_json("t1")), queries_json("q"), "Fact [1].", APPROVED]
+    )
+
+    def broken(_: object) -> None:
+        raise ValueError("secret-detail-do-not-print")
+
+    state = run_workflow(
+        GOAL,
+        llm=llm,
+        search=FakeSearchProvider([[hit(1)]]),
+        settings=make_settings(),
+        on_update=broken,
+    )
+
+    assert state["status"] is RunStatus.DONE
+    assert state["errors"] == []
+
+
 def test_step_limit_returns_a_failed_state_instead_of_raising(make_settings: MakeSettings) -> None:
     llm = FakeLLMProvider(
         [plan_json(task_json("t1")), queries_json("q"), "Fact [1].", APPROVED]

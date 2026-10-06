@@ -39,7 +39,7 @@ The V1 workflow (Supervisor, Research, Reviewer) has no approval node, because n
 - **Model calls** through `LLMProvider`. They send a prompt and read text back. They change nothing outside the run.
 - **Web search** through `SearchProvider`. It is read-only retrieval. It uses quota on the configured search key, and the number of calls is bounded by `max_search_queries`, `max_task_attempts`, `max_research_attempts`, and `max_review_revisions`.
 - **Reading settings** from the environment and an optional `.env` file.
-- **Writing** only to stdout (the final answer), stderr (logs and errors), and the in-memory state. The workflow writes no file, database, email, or message, and runs no shell command. There is no checkpointer, and no API endpoint calls the workflow.
+- **Writing** only to stdout (the final answer), stderr (logs and errors), and the in-memory state. The workflow writes no file, database, email, or message, and runs no shell command. There is no checkpointer. The API (`POST /api/runs`) calls the same workflow in a background thread. It keeps run state in memory only, allows at most 2 active runs, and serves a page with a strict Content Security Policy that builds the answer from text nodes, never from HTML. The server binds to `127.0.0.1` by default and has no login, so do not expose it on a network.
 
 ## Where the approval checkpoint goes
 
