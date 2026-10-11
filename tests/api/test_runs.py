@@ -301,6 +301,49 @@ def test_the_page_is_served_with_a_strict_content_security_policy(client: TestCl
     assert response.headers["x-content-type-options"] == "nosniff"
 
 
+def test_the_page_keeps_the_controls_the_script_needs() -> None:
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    for element_id in (
+        "activity",
+        "banner",
+        "copy-button",
+        "counter",
+        "download-button",
+        "empty-state",
+        "errors",
+        "errors-block",
+        "examples",
+        "goal",
+        "goal-form",
+        "history",
+        "history-empty",
+        "mod-key",
+        "result-body",
+        "result-panel",
+        "retry-button",
+        "review-block",
+        "review-issues",
+        "review-revisions",
+        "review-verdict",
+        "run-badge",
+        "run-button",
+        "run-elapsed",
+        "run-id",
+        "run-kicker",
+        "run-panel",
+        "run-title",
+        "setup-pill",
+        "stage-caption",
+        "stepper",
+        "tasks",
+        "tasks-block",
+        "tasks-count",
+        "theme-toggle",
+        "version",
+    ):
+        assert f'id="{element_id}"' in html
+
+
 def test_the_page_has_no_inline_script_and_no_remote_resource() -> None:
     html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
 

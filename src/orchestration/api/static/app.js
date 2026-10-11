@@ -3,11 +3,20 @@
 
   var POLL_MS = 1000;
   var MAX_POLL_FAILURES = 5;
-  var BASE_TITLE = "Multi-Agent Orchestration System";
+  var BASE_TITLE = "Multi-Agent Orchestration";
   var EXAMPLES = [
-    "Research upcoming technology events and summarize the useful findings with sources.",
-    "Compare the main open-source tools for running large language models locally.",
-    "Summarize recent news about renewable energy storage, with sources."
+    {
+      label: "Tech events",
+      text: "Research upcoming technology events and summarize the useful findings with sources."
+    },
+    {
+      label: "Local LLM tools",
+      text: "Compare the main open-source tools for running large language models locally."
+    },
+    {
+      label: "Energy storage",
+      text: "Summarize recent news about renewable energy storage, with sources."
+    }
   ];
   var STEPS = [
     { key: "plan", name: "Plan", note: "Supervisor" },
@@ -23,6 +32,7 @@
 
   var els = {
     form: $("goal-form"),
+    prompt: document.querySelector(".prompt-box"),
     goal: $("goal"),
     counter: $("counter"),
     runButton: $("run-button"),
@@ -30,6 +40,7 @@
     banner: $("banner"),
     empty: $("empty-state"),
     runPanel: $("run-panel"),
+    runKicker: $("run-kicker"),
     runId: $("run-id"),
     runTitle: $("run-title"),
     runBadge: $("run-badge"),
@@ -54,7 +65,8 @@
     historyEmpty: $("history-empty"),
     pill: $("setup-pill"),
     version: $("version"),
-    theme: $("theme-toggle")
+    theme: $("theme-toggle"),
+    activity: $("activity")
   };
 
   var state = {
@@ -65,10 +77,13 @@
     renderedResultFor: null,
     lastOutput: "",
     submitting: false,
-    setupBannerShown: false
+    setupBannerShown: false,
+    ready: false,
+    copyTimer: null,
+    scrollOnNext: false
   };
 
-  // ---------- DOM helpers (text nodes only, so data can never become markup) ----------
+  var clock = { timer: null, base: 0, mark: 0 };
 
   function el(tag, className, text) {
     var node = document.createElement(tag);
@@ -79,6 +94,33 @@
 
   function clear(node) {
     while (node.firstChild) node.removeChild(node.firstChild);
+  }
+
+  function prefersMotion() {
+    return !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
+  function scrollToNode(node, block) {
+    node.scrollIntoView({ behavior: prefersMotion() ? "smooth" : "auto", block: block || "start" });
+  }
+
+  function show(node) {
+    if (!node.hidden) return;
+    node.hidden = false;
+    node.classList.remove("rise");
+    void node.offsetWidth;
+    node.classList.add("rise");
+  }
+
+  function hide(node) {
+    node.hidden = true;
+    node.classList.remove("rise");
+  }
+
+  function nudge(node) {
+    node.classList.remove("nudge");
+    void node.offsetWidth;
+    node.classList.add("nudge");
   }
 
   function formatElapsed(seconds) {
@@ -94,7 +136,28 @@
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   }
 
-  // ---------- API ----------
+  function stopClock() {
+    if (clock.timer !== null) {
+      clearInterval(clock.timer);
+      clock.timer = null;
+    }
+  }
+
+  function paintElapsed() {
+    els.runElapsed.textContent = formatElapsed(clock.base + (performance.now() - clock.mark) / 1000);
+  }
+
+  function syncClock(view) {
+    if (view.status !== "running") {
+      stopClock();
+      els.runElapsed.textContent = formatElapsed(view.elapsed_seconds);
+      return;
+    }
+    clock.base = view.elapsed_seconds;
+    clock.mark = performance.now();
+    paintElapsed();
+    if (clock.timer === null) clock.timer = setInterval(paintElapsed, 1000);
+  }
 
   function ApiError(status, message) {
     this.status = status;
@@ -127,8 +190,6 @@
         });
     });
   }
-
-  // ---------- Safe markdown ----------
 
   var INLINE = new RegExp(
     [
@@ -270,10 +331,10 @@
     }
   }
 
-  // ---------- Rendering ----------
-
   function setBadge(node, value) {
-    node.className = "badge badge-" + value;
+    var next = "badge badge-" + value;
+    if (node.className === next && node.textContent === value) return;
+    node.className = next;
     node.textContent = value;
   }
 
@@ -298,20 +359,38 @@
     return broken ? 1 : 2;
   }
 
-  function renderStepper(view) {
+  function stepStateAt(view, index) {
     var failed = view.status === "failed";
     var done = view.status === "done";
     var active = failed ? failedStepIndex(view) : STAGE_STEP[view.stage];
+    if (done || index < active) return "done";
+    if (index === active) return failed ? "failed" : "active";
+    return "pending";
+  }
+
+  function noteFor(step, stepState, view) {
+    if (stepState === "failed") return "Stopped here";
+    if (stepState === "active" && view.stage === "revise" && step.key === "research") return "Revising";
+    if (stepState === "active" && view.stage === "finalize" && step.key === "final") return "Writing";
+    return step.note;
+  }
+
+  function renderStepper(view) {
+    var key = STEPS.map(function (step, index) {
+      return stepStateAt(view, index);
+    }).join(",") + ":" + view.stage;
+    if (els.stepper.dataset.key === key) return;
+    els.stepper.dataset.key = key;
     clear(els.stepper);
     STEPS.forEach(function (step, index) {
-      var stepState = "pending";
-      if (done || index < active) stepState = "done";
-      else if (index === active) stepState = failed ? "failed" : "active";
+      var stepState = stepStateAt(view, index);
       var item = el("li", "step");
       item.dataset.state = stepState;
-      item.appendChild(el("div", "step-name", step.name));
-      var note = stepState === "failed" ? "Stopped here" : step.note;
-      item.appendChild(el("div", "step-note", note));
+      item.appendChild(el("div", "step-mark", String(index + 1)));
+      var copy = el("div");
+      copy.appendChild(el("div", "step-name", step.name));
+      copy.appendChild(el("div", "step-note", noteFor(step, stepState, view)));
+      item.appendChild(copy);
       if (stepState === "active") item.setAttribute("aria-current", "step");
       els.stepper.appendChild(item);
     });
@@ -340,11 +419,17 @@
   }
 
   function renderTasks(view) {
+    var key = view.tasks.map(function (task) {
+      return [task.id, task.status, task.attempts, task.error || "", task.description].join("\u0001");
+    }).join("\u0002");
     els.tasksBlock.hidden = view.tasks.length === 0;
     els.tasksCount.textContent = view.tasks.length ? "(" + view.tasks.length + ")" : "";
+    if (els.tasks.dataset.key === key) return;
+    els.tasks.dataset.key = key;
     clear(els.tasks);
     view.tasks.forEach(function (task) {
       var row = el("li", "task");
+      row.dataset.status = task.status;
       row.appendChild(el("span", "task-id mono", task.id));
       var body = el("div");
       body.appendChild(el("div", "task-desc", task.description));
@@ -362,11 +447,12 @@
 
   function renderReview(view) {
     var review = view.review;
+    var key = review ? review.verdict + "\u0001" + review.revision_count + "\u0001" + review.issues.join("\u0002") : "";
     els.reviewBlock.hidden = !review;
-    if (!review) return;
+    if (!review || els.reviewBlock.dataset.key === key) return;
+    els.reviewBlock.dataset.key = key;
     setBadge(els.reviewVerdict, review.verdict);
-    els.reviewRevisions.textContent =
-      review.revision_count > 0 ? "Revisions used: " + review.revision_count : "";
+    els.reviewRevisions.textContent = review.revision_count > 0 ? "Revisions used: " + review.revision_count : "";
     clear(els.reviewIssues);
     review.issues.forEach(function (issue) {
       els.reviewIssues.appendChild(el("li", "", issue));
@@ -376,11 +462,12 @@
   function renderErrors(view) {
     var failed = view.status === "failed";
     var hasErrors = view.errors.length > 0;
-    els.errorsBlock.hidden = !(hasErrors || failed);
-    if (els.errorsBlock.hidden) return;
-    els.errorsBlock.querySelector(".section-title").textContent = failed
-      ? "What went wrong"
-      : "Problems so far";
+    var visible = hasErrors || failed;
+    var key = (visible ? "1" : "0") + "\u0001" + (failed ? "1" : "0") + "\u0001" + view.errors.join("\u0002");
+    els.errorsBlock.hidden = !visible;
+    if (!visible || els.errorsBlock.dataset.key === key) return;
+    els.errorsBlock.dataset.key = key;
+    els.errorsBlock.querySelector(".section-title").textContent = failed ? "What went wrong" : "Problems so far";
     clear(els.errors);
     var messages = hasErrors ? view.errors : ["The run did not finish. No details were recorded."];
     messages.forEach(function (message) {
@@ -391,32 +478,47 @@
 
   function renderResult(view) {
     var ready = view.status === "done" && !!view.final_output;
-    els.resultPanel.hidden = !ready;
     if (!ready) {
+      hide(els.resultPanel);
       state.renderedResultFor = null;
       state.lastOutput = "";
       return;
     }
-    if (state.renderedResultFor !== view.id) {
-      renderMarkdown(view.final_output, els.resultBody);
-      state.renderedResultFor = view.id;
-      state.lastOutput = view.final_output;
-    }
+    var first = state.renderedResultFor !== view.id;
+    show(els.resultPanel);
+    if (!first) return;
+    renderMarkdown(view.final_output, els.resultBody);
+    state.renderedResultFor = view.id;
+    state.lastOutput = view.final_output;
+    if (!state.scrollOnNext) scrollToNode(els.resultPanel, "nearest");
+  }
+
+  function setWorking(on) {
+    if (els.activity.hidden === on) els.activity.hidden = !on;
   }
 
   function renderRun(view) {
-    els.empty.hidden = true;
-    els.runPanel.hidden = false;
-    els.runId.textContent = view.id;
-    els.runTitle.textContent = view.goal;
+    hide(els.empty);
+    show(els.runPanel);
+    els.runPanel.dataset.status = view.status;
+    els.runKicker.textContent = view.id ? "Run" : "Starting";
+    if (els.runId.textContent !== view.id) els.runId.textContent = view.id;
+    if (els.runTitle.textContent !== view.goal) els.runTitle.textContent = view.goal;
     setBadge(els.runBadge, view.status);
-    els.runElapsed.textContent = formatElapsed(view.elapsed_seconds);
+    syncClock(view);
     renderStepper(view);
-    els.caption.textContent = captionFor(view);
+    var caption = captionFor(view);
+    if (els.caption.textContent !== caption) els.caption.textContent = caption;
     renderTasks(view);
     renderReview(view);
     renderErrors(view);
     renderResult(view);
+    setWorking(view.status === "running");
+    markCurrent();
+    if (state.scrollOnNext) {
+      state.scrollOnNext = false;
+      scrollToNode(view.status === "done" && view.final_output ? els.resultPanel : els.runPanel, "start");
+    }
 
     if (view.status === "running") document.title = "Running · " + BASE_TITLE;
     else if (view.status === "done") document.title = "Done · " + BASE_TITLE;
@@ -424,29 +526,67 @@
   }
 
   function clearRunView() {
-    els.runPanel.hidden = true;
-    els.resultPanel.hidden = true;
-    els.empty.hidden = false;
+    stopClock();
+    hide(els.runPanel);
+    hide(els.resultPanel);
+    show(els.empty);
+    setWorking(false);
     state.renderedResultFor = null;
     document.title = BASE_TITLE;
+    markCurrent();
+  }
+
+  function historyKey(items) {
+    return items.map(function (item) {
+      return item.id + "\t" + item.status + "\t" + item.goal;
+    }).join("\n");
+  }
+
+  function historyStamp(item) {
+    return formatTime(item.created_at) + " · " + formatElapsed(item.elapsed_seconds);
+  }
+
+  function updateHistoryTimes(items) {
+    var rows = els.history.querySelectorAll(".history-item");
+    items.forEach(function (item) {
+      for (var i = 0; i < rows.length; i++) {
+        if (rows[i].dataset.id !== item.id) continue;
+        var time = rows[i].querySelector(".history-time");
+        var stamp = historyStamp(item);
+        if (time && time.textContent !== stamp) time.textContent = stamp;
+      }
+    });
+  }
+
+  function markCurrent() {
+    var rows = els.history.querySelectorAll(".history-item");
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].dataset.id === state.currentId) rows[i].setAttribute("aria-current", "true");
+      else rows[i].removeAttribute("aria-current");
+    }
   }
 
   function renderHistory(items) {
-    clear(els.history);
     els.historyEmpty.hidden = items.length > 0;
+    var key = historyKey(items);
+    if (els.history.dataset.key === key) {
+      updateHistoryTimes(items);
+      markCurrent();
+      return;
+    }
+    els.history.dataset.key = key;
+    clear(els.history);
     items.forEach(function (item) {
       var row = el("li");
       var button = el("button", "history-item");
       button.type = "button";
-      if (item.id === state.currentId) button.setAttribute("aria-current", "true");
+      button.dataset.id = item.id;
       button.appendChild(el("span", "history-goal", item.goal));
       var meta = el("span", "history-meta");
       var badge = el("span");
       setBadge(badge, item.status);
       meta.appendChild(badge);
-      meta.appendChild(
-        el("span", "", formatTime(item.created_at) + " · " + formatElapsed(item.elapsed_seconds))
-      );
+      meta.appendChild(el("span", "history-time", historyStamp(item)));
       button.appendChild(meta);
       button.addEventListener("click", function () {
         selectRun(item.id);
@@ -454,6 +594,7 @@
       row.appendChild(button);
       els.history.appendChild(row);
     });
+    markCurrent();
   }
 
   function refreshHistory() {
@@ -464,14 +605,13 @@
       });
   }
 
-  // ---------- Polling and actions ----------
-
   function stopPolling() {
     if (state.pollTimer !== null) {
       clearTimeout(state.pollTimer);
       state.pollTimer = null;
     }
     state.pollFailures = 0;
+    stopClock();
   }
 
   function poll(id) {
@@ -513,6 +653,8 @@
     if (!state.setupBannerShown) hideBanner();
     state.currentId = id;
     state.renderedResultFor = null;
+    state.scrollOnNext = true;
+    markCurrent();
     history.replaceState(null, "", "#run=" + encodeURIComponent(id));
     poll(id);
   }
@@ -520,18 +662,36 @@
   function setSubmitting(value) {
     state.submitting = value;
     els.runButton.disabled = value;
-    els.runButton.querySelector("span").textContent = value ? "Starting" : "Run goal";
+    els.runButton.classList.toggle("is-busy", value);
+    els.runButton.setAttribute("aria-busy", value ? "true" : "false");
+    els.runButton.querySelector("span").textContent = value ? "Starting" : "Run";
   }
 
   function updateCounter() {
     var length = els.goal.value.length;
-    els.counter.textContent = length + " / " + state.maxGoalChars;
-    els.counter.classList.toggle("over", length > state.maxGoalChars);
+    var max = state.maxGoalChars;
+    els.counter.textContent = length + " / " + max;
+    els.counter.classList.toggle("near", length > max * 0.85 && length <= max);
+    els.counter.classList.toggle("over", length > max);
+    els.goal.setAttribute("aria-invalid", length > max ? "true" : "false");
+    var chips = els.examples.querySelectorAll(".chip");
+    for (var i = 0; i < chips.length; i++) {
+      chips[i].setAttribute("aria-pressed", chips[i].dataset.text === els.goal.value ? "true" : "false");
+    }
   }
 
   function autoGrow() {
     els.goal.style.height = "auto";
-    els.goal.style.height = Math.min(els.goal.scrollHeight + 2, 340) + "px";
+    els.goal.style.height = Math.min(els.goal.scrollHeight + 2, 320) + "px";
+  }
+
+  function showStartError(error) {
+    if (error instanceof ApiError) {
+      showBanner(error.message, error.status === 503 ? "Setup needed. " : "Could not start. ", true);
+      if (error.status === 503) loadStatus();
+    } else {
+      showBanner("Check that the server is running, then try again.", "Could not reach the server. ", true);
+    }
   }
 
   function submit() {
@@ -539,39 +699,65 @@
     var goal = els.goal.value.trim();
     if (!goal) {
       showBanner("Write a goal first.", "", false);
+      nudge(els.prompt);
       els.goal.focus();
       return;
     }
     if (goal.length > state.maxGoalChars) {
       showBanner("Shorten it to " + state.maxGoalChars + " characters or fewer.", "Goal is too long. ", true);
+      nudge(els.prompt);
+      els.goal.focus();
       return;
     }
-    hideBanner();
+    if (!state.setupBannerShown) hideBanner();
+    var previousId = state.currentId;
     setSubmitting(true);
+    stopPolling();
+    state.currentId = "pending";
+    state.renderedResultFor = null;
+    state.lastOutput = "";
+    markCurrent();
+    if (state.ready) {
+      renderRun({
+        id: "",
+        goal: goal,
+        status: "running",
+        stage: "plan",
+        elapsed_seconds: 0,
+        tasks: [],
+        review: null,
+        errors: [],
+        final_output: null
+      });
+      scrollToNode(els.runPanel, "start");
+    }
     api("/api/runs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ goal: goal })
     })
       .then(function (view) {
-        stopPolling();
+        refreshHistory();
+        if (state.currentId !== "pending") return;
         state.currentId = view.id;
         state.renderedResultFor = null;
         history.replaceState(null, "", "#run=" + encodeURIComponent(view.id));
         renderRun(view);
-        refreshHistory();
         state.pollTimer = setTimeout(function () {
           poll(view.id);
         }, POLL_MS);
-        els.runPanel.scrollIntoView({ behavior: "smooth", block: "start" });
       })
       .catch(function (error) {
-        if (error instanceof ApiError) {
-          showBanner(error.message, error.status === 503 ? "Setup needed. " : "Could not start. ", true);
-          if (error.status === 503) loadStatus();
-        } else {
-          showBanner("Check that the server is running, then try again.", "Could not reach the server. ", true);
+        if (state.currentId === "pending") {
+          if (previousId && previousId !== "pending") {
+            selectRun(previousId);
+          } else {
+            state.currentId = null;
+            clearRunView();
+            history.replaceState(null, "", location.pathname + location.search);
+          }
         }
+        showStartError(error);
       })
       .then(function () {
         setSubmitting(false);
@@ -582,6 +768,7 @@
     return api("/api/status")
       .then(function (status) {
         state.maxGoalChars = status.max_goal_chars;
+        state.ready = status.ready;
         updateCounter();
         els.version.textContent = "Version " + status.version;
         if (status.ready) {
@@ -605,22 +792,25 @@
         }
       })
       .catch(function () {
+        state.ready = false;
         els.pill.className = "pill pill-bad";
         els.pill.textContent = "Server unreachable";
       });
   }
 
-  // ---------- Setup ----------
-
   function setupExamples() {
-    EXAMPLES.forEach(function (text) {
-      var chip = el("button", "chip", text);
+    EXAMPLES.forEach(function (item) {
+      var chip = el("button", "chip", item.label);
       chip.type = "button";
+      chip.dataset.text = item.text;
+      chip.title = item.text;
+      chip.setAttribute("aria-label", item.text);
       chip.addEventListener("click", function () {
-        els.goal.value = text;
+        els.goal.value = item.text;
         updateCounter();
         autoGrow();
         els.goal.focus();
+        els.goal.setSelectionRange(item.text.length, item.text.length);
       });
       els.examples.appendChild(chip);
     });
@@ -632,6 +822,13 @@
     return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   }
 
+  function applyThemeLabel() {
+    var next = currentTheme() === "dark" ? "light" : "dark";
+    var label = "Switch to " + next + " theme";
+    els.theme.setAttribute("aria-label", label);
+    els.theme.title = label;
+  }
+
   function toggleTheme() {
     var next = currentTheme() === "dark" ? "light" : "dark";
     document.documentElement.dataset.theme = next;
@@ -640,16 +837,21 @@
     } catch (error) {
       // Storage can be blocked. The theme still changes for this visit.
     }
+    applyThemeLabel();
   }
 
   function copyOutput() {
     if (!state.lastOutput) return;
-    var original = els.copy.textContent;
+    var label = els.copy.querySelector("span");
     var finish = function (text) {
-      els.copy.textContent = text;
-      setTimeout(function () {
-        els.copy.textContent = original;
-      }, 1600);
+      label.textContent = text;
+      els.copy.classList.toggle("is-done", text === "Copied");
+      if (state.copyTimer !== null) clearTimeout(state.copyTimer);
+      state.copyTimer = setTimeout(function () {
+        label.textContent = label.dataset.label || "Copy";
+        els.copy.classList.remove("is-done");
+        state.copyTimer = null;
+      }, 1400);
     };
     if (!navigator.clipboard) {
       finish("Copy not available");
@@ -689,6 +891,11 @@
     }
   }
 
+  function setupShortcut() {
+    var mac = /Mac|iPhone|iPad/.test(navigator.platform) || /Mac/.test(navigator.userAgent);
+    if (mac) $("mod-key").textContent = "⌘";
+  }
+
   els.form.addEventListener("submit", function (event) {
     event.preventDefault();
     submit();
@@ -705,7 +912,7 @@
   });
   els.retry.addEventListener("click", function () {
     els.goal.focus();
-    els.goal.scrollIntoView({ behavior: "smooth", block: "center" });
+    scrollToNode(els.goal, "center");
   });
   els.copy.addEventListener("click", copyOutput);
   els.download.addEventListener("click", downloadOutput);
@@ -713,10 +920,15 @@
   window.addEventListener("hashchange", runFromHash);
   window.addEventListener("focus", loadStatus);
 
+  setupShortcut();
   setupExamples();
   updateCounter();
+  applyThemeLabel();
   loadStatus().then(function () {
     refreshHistory();
     runFromHash();
+    if (!location.hash && document.activeElement === document.body) {
+      els.goal.focus({ preventScroll: true });
+    }
   });
 })();
